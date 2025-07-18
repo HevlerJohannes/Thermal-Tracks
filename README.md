@@ -6,7 +6,7 @@
 While originally developed for temperature-dependent abundance profiles, the framework is applicable to any continuous variable (e.g., temperature, time, concentration) that modulates protein intensity across two conditions (e.g., control and perturbation).
 
 <p align="center">
-  <img width="500" alt="Image" src="https://github.com/user-attachments/assets/2c58a1a5-17f4-4ad9-9236-ec89efa4a949" />
+  <img width="500" alt="Image" src="[https://github.com/user-attachments/assets/2c58a1a5-17f4-4ad9-9236-ec89efa4a949](https://raw.githubusercontent.com/HevlerJohannes/Thermal-Tracks/main/Readme/fig/400ppi/ThermalTracks_schematic.png" />
 </p>
 
 <p align="center"><small><em>Figure 1. Overview of the Thermal Tracks workflow. The framework fits scaled intensity data from TPP experiments (1) using an RBF kernel (prior distribution) and a Multi-output Gaussian Process (MOGP) model to compare control and treatment conditions. The full model, which includes fits (posterior distribution) for both control (blue) and perturbation (green) conditions, is fitted using Type II maximum likelihood estimation (MLE). Estimated parameters are then incorporated into joint models (black dotted lines), which combine control and treatment conditions. These joint models are used to quantify changes in melting behavior in control vs perturbation by approximating the null distribution of the Thermal Tracks test statistic Λ (2). The observed statistics Λcontrol vs. perturbation are compared to this null distribution approximation to compute empirical p-values. Further, an effect size is determined based on the predicted fits from the full model.</em></small></p>
