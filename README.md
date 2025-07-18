@@ -35,11 +35,12 @@ Thermal Tracks is a robust statistical framework designed to improve the analysi
 
 ### Create and activate environment
 - conda env create -f environment.yml
-- conda activate your-env-name
+- conda activate ThermalTracks
 
 ## Run Thermal Tracks
 Thermal Tracks is primarily run through Jupyter notebooks. You can find example analysis notebooks in the [Analysis_notebook](./Analysis_notebooks) folder.
 A full tutorial on how to choose parameters and run the analysis will be added shortly.
+
 ## License
 GNU General Public License v3.0
 
