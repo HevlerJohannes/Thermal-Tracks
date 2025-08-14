@@ -13,7 +13,7 @@ While originally developed for temperature-dependent abundance profiles, the fra
 
 **More details & benchmarking:** 
 
-Johannes F. Hevler, Shivam Verma, Mirat Soijtra, Carolyn R. Bertozzi(2025), *Thermal Tracks: A Gaussian process-based framework for universal melting curve analysis enabling unconstrained hit identification in thermal proteome profiling experiments* — [Abstract](https://arxiv.org/abs/2508.09659) · [PDF](https://arxiv.org/pdf/2508.09659v1)
+Johannes F. Hevler, Shivam Verma, Mirat Soijtra, Carolyn R. Bertozzi (2025), *Thermal Tracks: A Gaussian process-based framework for universal melting curve analysis enabling unconstrained hit identification in thermal proteome profiling experiments* — [Abstract](https://arxiv.org/abs/2508.09659) · [PDF](https://arxiv.org/pdf/2508.09659v1)
 
 
 ## Abstract
