@@ -2,25 +2,27 @@
 from copy import deepcopy
 
 # Import util functions
-from utils import update_checklist
-from utils import compute_sum_extreme
-from utils import benjamini_hochberg
+from utils import is_notebook, update_checklist, compute_sum_extreme, benjamini_hochberg
 
 def compute_likelihood_statistics(result_dict_full, result_dict_null, parameters):
 
     # Update the checklist
-        
-    tasks = [
-    ("1. Build and fit full model", True),
-    ("2. Create a joint model and null dataset", True),
-    ("3. Evaluate and predict models", True),
-    ("4. Build and fit null model", True),
-    ("5. Compute likelihood ratio test statistics", False),
-    ("6. Combine and create result files", False)
-    ]
+    if is_notebook():    
+        tasks = [
+        ("1. Build and fit full model", True),
+        ("2. Create a joint model and null dataset", True),
+        ("3. Evaluate and predict models", True),
+        ("4. Build and fit null model", True),
+        ("5. Compute likelihood ratio test statistics", False),
+        ("6. Combine and create result files", False)
+        ]
 
-    update_checklist(tasks)
+        update_checklist(tasks)
 
+    # Get output and perturbation information
+    output_path = str(parameters['result_dir'])
+    pert = parameters['perturbation']
+    
     # exclude poorly fitted ids from statistic calculation
     exclude_poor_fits = parameters['exclude_poor_fits']
     
@@ -62,6 +64,11 @@ def compute_likelihood_statistics(result_dict_full, result_dict_null, parameters
     # Adjust p-Value using Benjamini-Hochberg
     p_val['adj_pValue'] = benjamini_hochberg(p_val['pValue'])
 
+    # Get Test statistics
+    test_stats = {
+        "no_significant_proteins_pval": len(p_val[p_val['pValue'] <= 0.05]),
+        "no_significant_proteins_adj_pval": len(p_val[p_val['adj_pValue'] <= 0.05])
+    }
     # copy results to result dict
     # Add predictions to result dict
     likelihood_statistics_result_dict = deepcopy(result_dict_full)
@@ -69,6 +76,19 @@ def compute_likelihood_statistics(result_dict_full, result_dict_null, parameters
             "gp_likelihood_statistics_df" : p_val})
     
     # Update checklist
-    tasks[4] = ("5. Compute likelihood ratio test statistics", True)
-    update_checklist(tasks)
+    if is_notebook():     
+        tasks[4] = ("5. Compute likelihood ratio test statistics", True)
+        update_checklist(tasks)
+
+    # Update summery file
+    with open(f'{output_path}/{pert}_Thermal_Tracks_summary.txt', 'a') as f:
+        f.write("\n" + "="*70 + "\n")
+        f.write("LR-test statistics\n")
+        f.write("="*70+ "\n")
+        f.write(f"Poor fits removed for LR statitics: {parameters['exclude_poor_fits']}")
+        f.write(f"Sample Size of Null distribution: {len(null_distribution)}")
+        f.write(f"Number of significantly changed proteins (p-value): {test_stats['no_significant_proteins_pval']}\n")
+        f.write(f"Number of significantly changed proteins (BH adj. p-value): {test_stats['no_significant_proteins_adj_pval']}\n")
+        f.write("="*70 + "\n")   
+
     return(likelihood_statistics_result_dict) 

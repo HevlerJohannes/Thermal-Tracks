@@ -10,44 +10,50 @@ import torch
 import gc
 
 # Import util functions
-from utils import update_checklist
-from utils import normalize_covariance_matrix
-from utils import plot_posterior_distributions
-from utils import plot_covariance_matrix_imshow
-from utils import combine_mll_dfs
+from utils import is_notebook, update_checklist, normalize_covariance_matrix, plot_posterior_distributions, plot_covariance_matrix_imshow, combine_mll_dfs
 
 
 # Combine and save result files
-def prepare_gp_results(result_dict_full, result_dict_null, parameters):
+def prepare_gp_results_batched(result_dict_full, result_dict_null, parameters):
 
+    # Check whether result plots should be created
     plot_models = parameters['create_plots']
-    if plot_models == True:
-
+    
+    if is_notebook():    
+        if plot_models == True:
         # Update the checklist
-        tasks = [
-            ("1. Build and fit full model", True),
-            ("2. Create a joint model and null dataset", True),
-            ("3. Evaluate and predict models", True),
-            ("4. Build and fit null model", True),
-            ("5. Compute likelihood ratio test statistics", True),
-            ("6. Combine and create result files", False, [
-                ("Create plots for model comparison", False),
-                ("Combine and save results", False)
-            ])
+            tasks = [
+                ("1. Build and fit full model", True),
+                ("2. Create a joint model and null dataset", True),
+                ("3. Evaluate and predict models", True),
+                ("4. Build and fit null model", True),
+                ("5. Compute likelihood ratio test statistics", True),
+                ("6. Combine and create result files", False, [
+                    ("Create plots for model comparison", False),
+                    ("Combine and save results", False)
+                ])
             ]
-    else:
-        tasks = [
-            ("1. Build and fit full model", True),
-            ("2. Create a joint model and null dataset", True),
-            ("3. Evaluate and predict models", True),
-            ("4. Build and fit null model", True),
-            ("5. Compute likelihood ratio test statistics", True),
-            ("6. Combine and create result files", False, [
-                ("Combine and save results", False)
-            ])
+        else:
+            tasks = [
+                ("1. Build and fit full model", True),
+                ("2. Create a joint model and null dataset", True),
+                ("3. Evaluate and predict models", True),
+                ("4. Build and fit null model", True),
+                ("5. Compute likelihood ratio test statistics", True),
+                ("6. Combine and create result files", False, [
+                    ("Combine and save results", False)
+                ])
             ]
-        
-    update_checklist(tasks)
+            
+        update_checklist(tasks)
+
+    # Get output and perturbation information
+    output_path = str(parameters['result_dir'])
+    pert = parameters['perturbation']
+    with open(f'{output_path}/{pert}_Thermal_Tracks_summary.txt', 'a') as f:
+        f.write("\n" + "="*70 + "\n")
+        f.write("PREPARING RESULTS" + "\n")
+        f.write("="*70 + "\n")
 
     # Get predictions, covariance and protein ids
     prediction_result_df = result_dict_full['gp_result_df'].copy()
@@ -60,14 +66,23 @@ def prepare_gp_results(result_dict_full, result_dict_null, parameters):
     control = parameters['control_condition']
     perturbation = parameters['perturbation']
 
+    with open(f'{output_path}/{pert}_Thermal_Tracks_summary.txt', 'a') as f:
+        f.write(f"Proteins: {len(proteins2test)}" + "\n")
+        f.write(f"Proteins: {len(proteins2test)}" + "\n")
+        f.write(f"Proteins: {len(proteins2test)}" + "\n")
+        f.write(f"Conditions: {list(conditions)}" + "\n" )
+        f.write(f"Output path: {output_path}" + "\n")
+        f.write("="*70 + "\n")
            
-    if plot_models == True: # To do add code to plot covariance matrix!!!
+    if plot_models == True:
 
+        # Update checklist
+        if is_notebook():
+            live_update_message = f"(Creating plots...)"
+            update_checklist(tasks, live_update={"task": "6. Combine and create result files", "subtask": "Create plots for model comparison", "message": live_update_message})
+        
         # Create directory for plots
-        # Define the name of the new directory
         plot_dir = "result_plots"
-
-        # Create the full path for the new directory
         plot_dir_path = os.path.join(output_path, plot_dir)
 
         # Create the directory if it doesn't exist
@@ -79,9 +94,7 @@ def prepare_gp_results(result_dict_full, result_dict_null, parameters):
                         
         # Create plots as a single pdf page
         for prot in proteins2test:
-            
             with PdfPages(f'{plot_dir_path}/result_plots_{prot}.pdf') as pdf:
-                        
                 # Increment the iteration counter
                 iteration_counter += 1
                 plot_df = prediction_result_df[prediction_result_df['uniqueID'] == prot]
@@ -106,69 +119,116 @@ def prepare_gp_results(result_dict_full, result_dict_null, parameters):
                 plt.tight_layout()
                 pdf.savefig(fig)
                 plt.close(fig)
+                
                 # Explicitly delete large objects
                 del plot_df, normalized_covariance_matrix_control, normalized_covariance_matrix_perturbation, normalized_covariance_matrix_joint 
                 gc.collect()
                 
-                # Update checklist        
-                live_update_message = f"(Plots generated: {iteration_counter}/{len(proteins2test)})"
-                update_checklist(tasks, live_update={"task": "6. Combine and create result files", "subtask": "Create plots for model comparison", "message": live_update_message})
-            
-        live_update_message = f"(All plots generated and saved!)"
-        update_checklist(tasks, live_update={"task": "6. Combine and create result files", "subtask": "Create plots for model comparison", "message": live_update_message})
-        tasks[5][2][0] = ("Create plots for model comparison", True)
-        update_checklist(tasks)
-
-    # Save created models and likelihoods (full and joint)
-    torch.save(result_dict_full["full_model_list"].state_dict(), f'{output_path}/gp_full_model_{parameters["control_condition"]}_{parameters["perturbation"]}.pth')
-    torch.save(result_dict_full["full_likelihood_list"].state_dict(), f'{output_path}/gp_full_likelihood_{parameters["control_condition"]}_{parameters["perturbation"]}.pth')
-    torch.save(result_dict_full["joint_model_list"].state_dict(), f'{output_path}/gp_joint_model_{parameters["control_condition"]}_{parameters["perturbation"]}.pth')
-    torch.save(result_dict_full["joint_likelihood_list"].state_dict(), f'{output_path}/gp_joint_likelihood_{parameters["control_condition"]}_{parameters["perturbation"]}.pth')
-
-
+                # Update checklist
+                if is_notebook():        
+                    live_update_message = f"(Plots generated: {iteration_counter}/{len(proteins2test)})"
+                    update_checklist(tasks, live_update={"task": "6. Combine and create result files", "subtask": "Create plots for model comparison", "message": live_update_message})
+        
+        # Update checklist
+        if is_notebook():  
+            live_update_message = f"(All plots generated and saved!)"
+            update_checklist(tasks, live_update={"task": "6. Combine and create result files", "subtask": "Create plots for model comparison", "message": live_update_message})
+            tasks[5][2][0] = ("Create plots for model comparison", True)
+            update_checklist(tasks)
+    
+    # Save full model state dicts
+    full_state_dicts = result_dict_full["full_state_dict_list"]
+    torch.save(full_state_dicts, f'{output_path}/gp_full_model_state_dicts_{control}_{perturbation}.pth')
+    
+    # Save full model metadata to reconstruct later
+    full_model_metadata = {
+        'metadata': result_dict_full["full_model_metadata"],
+        'batch_size': result_dict_full.get("batch_size", None),
+        'n_batched_models': result_dict_full.get("n_batched_models", None),
+        'n_total_tasks': result_dict_full.get("n_total_tasks", None),
+        'device': result_dict_full.get("device", "cpu")
+    }
+    torch.save(full_model_metadata, f'{output_path}/gp_full_model_metadata_{control}_{perturbation}.pth')
+    
+    # Save joint models (these are IndependentModelList, so they work as before)
+    torch.save(result_dict_full["joint_model_list"].state_dict(), f'{output_path}/gp_joint_model_{control}_{perturbation}.pth')
+    torch.save(result_dict_full["joint_likelihood_list"].state_dict(), f'{output_path}/gp_joint_likelihood_{control}_{perturbation}.pth')
+    
     # Save result dictionaries as pickle file
-    # List of keys you want to remove
-    keys_to_remove = ['full_model_list', 'full_likelihood_list', 'full_state_dict_list', 'joint_model_list', 'joint_likelihood_list', 'joint_state_dict_list'] 
+    # List of keys you want to remove (model objects are too large)
+    keys_to_remove = [
+        'full_model_list', 
+        'full_likelihood_list', 
+        'full_state_dict_list', 
+        'joint_model_list', 
+        'joint_likelihood_list', 
+        'joint_state_dict_list'
+    ]
+    
     # Remove the keys from the dictionary
     result_dict_filt = deepcopy(result_dict_full)
     for key in keys_to_remove:
         result_dict_filt.pop(key, None)
 
-    with open(f'{output_path}/combined_gp_results_{parameters["control_condition"]}_{parameters["perturbation"]}.pkl', 'wb') as file:
-            pickle.dump(result_dict_filt, file)
-
-    # Save single result dataframes for easy access
+    with open(f'{output_path}/combined_gp_results_{control}_{perturbation}.pkl', 'wb') as file:
+        pickle.dump(result_dict_filt, file)
     
     # Full model
-    keys_full = ['exactgp_input', 'full_fit_parameters_df', 'lr_values_full_vs_joint','gp_result_df', 'gp_likelihood_statistics_df']
-    file_names_full = ['model_input', 'loss_full_model', 'lr_values_full_model','predictions', 'lr_test_statistics']
+    keys_full = ['exactgp_input', 'full_fit_parameters_df', 'lr_values_full_vs_joint', 'gp_result_df', 'gp_likelihood_statistics_df']
+    file_names_full = ['model_input', 'loss_full_model', 'lr_values_full_model', 'predictions', 'lr_test_statistics']
 
+    files_saved = 0
     for i, j in zip(keys_full, file_names_full):
-        result_dict_full[i].to_csv(f'{output_path}/{j}.csv', index = False)
+        if i in result_dict_full:
+            result_dict_full[i].to_csv(f'{output_path}/{j}.csv', index=False)
+            files_saved += 1
 
-    # combine mll values full model
-    mll_values_combined_full = combine_mll_dfs(result_dict_full['full_mll_values'].copy(), result_dict_full['joint_mll_values'].copy()) 
-    mll_values_combined_full.to_csv(f'{output_path}/mll_values_full_model.csv', index = False)
+    # Combine mll values full model
+    mll_values_combined_full = combine_mll_dfs(
+        result_dict_full['full_mll_values'].copy(), 
+        result_dict_full['joint_mll_values'].copy()
+    )
+    mll_values_combined_full.to_csv(f'{output_path}/mll_values_full_model.csv', index=False)
+    files_saved += 1
+    
     # Null model
     keys_null = ['exactgp_input', 'full_fit_parameters_df', 'lr_values_full_vs_joint']
     file_names_null = ['sampled_null_dataset', 'loss_null_model', 'lr_values_null_model']
 
+    files_saved_null = 0
     for i, j in zip(keys_null, file_names_null):
-        result_dict_null[i].to_csv(f'{output_path}/{j}.csv', index = False) 
+        if i in result_dict_null:
+            result_dict_null[i].to_csv(f'{output_path}/{j}.csv', index=False)
+            files_saved_null += 1
 
-    # combine mll values null model
-    mll_values_combined_null = combine_mll_dfs(result_dict_null['full_mll_values'].copy(), result_dict_null['joint_mll_values'].copy())        
-    mll_values_combined_null.to_csv(f'{output_path}/mll_values_null_model.csv', index = False)
+    # Combine mll values null model
+    mll_values_combined_null = combine_mll_dfs(
+        result_dict_null['full_mll_values'].copy(), 
+        result_dict_null['joint_mll_values'].copy()
+    )
+    mll_values_combined_null.to_csv(f'{output_path}/mll_values_null_model.csv', index=False)
+    files_saved_null += 1
 
     # Update checklist
-    if plot_models == True:
-        tasks[5][2][1] = ("Combine and save results", True)
-        update_checklist(tasks)
+    if is_notebook(): 
+        if plot_models == True:
+            tasks[5][2][1] = ("Combine and save results", True)
+            update_checklist(tasks)
+        else:
+            tasks[5][2][0] = ("Combine and save results", True)
+            update_checklist(tasks)
         
+        tasks[5] = ("6. Combine and create result files", True)
         update_checklist(tasks)
-    else:
-        tasks[5][2][0] = ("Combine and save results", True)
-        update_checklist(tasks)
-       
-    tasks[5] = ("6. Combine and create result files", True)
-    update_checklist(tasks)             
+    
+    # Update summery file
+    with open(f'{output_path}/{pert}_Thermal_Tracks_summary.txt', 'a') as f:
+        f.write("\n" + "="*70 + "\n")
+        f.write("RESULTS SAVED SUCCESSFULLY\n")
+        f.write("="*70+ "\n")
+        f.write(f"Output directory: {output_path}\n")
+        f.write(f"Model files: 4\n")
+        f.write(f"CSV files: {files_saved + files_saved_null}\n")
+        if plot_models:
+            f.write(f"Plot PDFs: {len(proteins2test)}\n")
+        f.write("="*70 + "\n")

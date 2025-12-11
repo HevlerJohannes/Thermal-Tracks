@@ -12,6 +12,19 @@ import seaborn as sns
 ########### UTILS ###########
 #############################
 
+# Function to recognize whether code is executed in a jupyter notebook
+def is_notebook():
+    try:
+        from IPython import get_ipython
+        if 'IPKernelApp' in get_ipython().config:  # Jupyter notebook
+            return True
+        elif 'TerminalIPythonApp' in get_ipython().config:  # IPython terminal
+            return False
+    except (ImportError, AttributeError):
+        return False  # Probably standard Python interpreter
+    return False
+
+# Function to plot posterior distribution
 def plot_posterior_distributions(ax, prot, plot_df, conditions):
     colors = ['#99d8c9', '#2ca25f']
     color_areas = ['#ff7f00', '#6a3d9a']
