@@ -1,5 +1,12 @@
 # Thermal-Tracks
 
+## Test Branch for newly added functionality
+- [ ] fix predict_model.py: Fails for large Null datasets --> change creation of result dataframe (get rid of append method)
+- [ ] add functionality for handling proteins with different datapoints (e.g., due to missing values)
+- [ ] add simple GUI logic
+- [ ] carefully evaluate Null sampling
+- [ ] simplify parameter input / reduce complexity  
+
 ## Description
 
 **Thermal-Tracks** is a robust statistical framework designed to improve the analysis of protein melting curves in TPP-TR experiments.  
