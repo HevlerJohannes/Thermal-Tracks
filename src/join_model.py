@@ -7,27 +7,45 @@ from copy import deepcopy
 
 # Import util functions
 from utils import update_checklist, is_notebook, compute_likelihood_ratio
+from build_model import create_mean_function
 
 class ExactGPModel(gpytorch.models.ExactGP):
     """
-    Single-task ExactGP model for joint models (non-batched)
+    Single-task ExactGP used for joint (null-hypothesis) models.
+
+    Combines training data from both conditions into a single GP. The
+    lengthscale constraint is computed from the unique temperature values in
+    the concatenated training set.
+
+    Args:
+        train_x: Combined temperature tensor from both conditions.
+        train_y: Combined intensity tensor from both conditions.
+        likelihood: GaussianLikelihood instance.
+        scale_kernel: If True, wraps RBFKernel in ScaleKernel.
+        mean: Mean function specification (str, gpytorch Mean, or None).
+        lengthscale_prior: Prior on RBF lengthscale.
+        lengthscale_minconstraint: Statistic for lengthscale lower bound
+            ("min", "mean", "median", "max", or None).
+        lengthscale_mult: Multiplier on the lengthscale constraint.
+        outputscale_prior: Prior on ScaleKernel outputscale.
     """
-    def __init__(self, train_x, train_y, likelihood, scale_kernel=False, 
-                 mean=gpytorch.means.ZeroMean(), 
-                 lengthscale_prior=None, 
-                 lengthscale_minconstraint=None, 
-                 lengthscale_mult=1.0):
+    def __init__(self, train_x, train_y, likelihood, scale_kernel=False,
+                 mean=gpytorch.means.ZeroMean(),
+                 lengthscale_prior=None,
+                 lengthscale_minconstraint=None,
+                 lengthscale_mult=1.0,
+                 outputscale_prior=None):
         super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
 
-        self.mean_module = mean
-        
+        self.mean_module = create_mean_function(mean)
+
         # Calculate lengthscale constraint
         lengthscale_constraint = None
         if lengthscale_minconstraint is not None:
             train_x_values = train_x.unique()
             if len(train_x_values) > 1:
                 DistVec = train_x_values[1:] - train_x_values[:-1]
-                
+
                 if lengthscale_minconstraint == 'min':
                     Constt = lengthscale_mult * torch.min(DistVec)
                 elif lengthscale_minconstraint == 'mean':
@@ -36,16 +54,20 @@ class ExactGPModel(gpytorch.models.ExactGP):
                     Constt = lengthscale_mult * torch.median(DistVec)
                 elif lengthscale_minconstraint == 'max':
                     Constt = lengthscale_mult * torch.max(DistVec)
-                
-                lengthscale_constraint = gpytorch.constraints.GreaterThan(Constt)
-        
+                else:
+                    Constt = None
+
+                if Constt is not None:
+                    lengthscale_constraint = gpytorch.constraints.GreaterThan(Constt)
+
         # Covariance module
         if scale_kernel:
             self.covar_module = gpytorch.kernels.ScaleKernel(
                 gpytorch.kernels.RBFKernel(
                     lengthscale_prior=lengthscale_prior,
                     lengthscale_constraint=lengthscale_constraint
-                )
+                ),
+                outputscale_prior=outputscale_prior
             )
         else:
             self.covar_module = gpytorch.kernels.RBFKernel(
@@ -60,7 +82,27 @@ class ExactGPModel(gpytorch.models.ExactGP):
 
 
 def define_joint_model_batched(result_dict, parameters, null_dataset=[True, False]):
+    """
+    Create joint (null-hypothesis) models by combining both conditions per protein.
 
+    For each protein, the trained parameters from the two condition-specific GPs are
+    averaged and loaded into a single ExactGPModel fitted on the concatenated data.
+    When null_dataset is False, synthetic datasets are sampled from each joint model's
+    prior (samples_per_id times) to build the empirical null distribution for the
+    likelihood ratio test.
+
+    Args:
+        result_dict: Output from train_model_batched_optimized containing trained
+            models, metadata, and MLL values.
+        parameters: Full parameter dictionary.
+        null_dataset: If False (real data), samples null datasets from the joint prior.
+            If True (null pipeline), skips sampling.
+
+    Returns:
+        join_model_result_dict: Extended copy of result_dict with joint_model_list,
+            joint_likelihood_list, joint MLL values, LR values, and (when
+            null_dataset=False) the sampled_prior_df.
+    """
     # Update the checklist
     if is_notebook():
         if null_dataset == False:
@@ -94,7 +136,7 @@ def define_joint_model_batched(result_dict, parameters, null_dataset=[True, Fals
         # Display the updated checklist
         update_checklist(tasks)    
 
-    # Load data from training - UPDATED for batched model format
+    # Load data from training
     full_model_list = deepcopy(result_dict['full_model_list'])  # List of (model, likelihood, metadata) tuples
     metadata_list = deepcopy(result_dict['full_model_metadata'])  # Flat list of metadata dicts
     mll_values_full_model_df = deepcopy(result_dict['full_mll_values'])
@@ -206,16 +248,20 @@ def define_joint_model_batched(result_dict, parameters, null_dataset=[True, Fals
             'Size of training targets are incorrect - Joining models stopped!'
         
         # Create a new model and likelihood for the joint model
-        combined_likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device)
+        combined_likelihood = gpytorch.likelihoods.GaussianLikelihood(
+            noise_prior=parameters.get('noise_prior', None),
+            noise_constraint=parameters.get('noise_constraint', None),
+        ).to(device)
         combined_model = ExactGPModel(
-            combined_train_input, 
-            combined_train_target, 
+            combined_train_input,
+            combined_train_target,
             combined_likelihood,
             scale_kernel=scale_kernel,
-            lengthscale_prior=parameters.get('lengthscale_prior'), 
-            lengthscale_minconstraint=parameters.get('lengthscale_minconstraint'), 
-            mean=parameters.get('MeanFunction'), 
-            lengthscale_mult=parameters.get('lengthscale_mult', 1.0)
+            lengthscale_prior=parameters.get('lengthscale_prior'),
+            lengthscale_minconstraint=parameters.get('lengthscale_minconstraint'),
+            mean=parameters.get('MeanFunction'),
+            lengthscale_mult=parameters.get('lengthscale_mult', 1.0),
+            outputscale_prior=parameters.get('outputscale_prior', None)
         ).to(device)
         
         # Combine state dictionaries and average all parameters
@@ -227,6 +273,14 @@ def define_joint_model_batched(result_dict, parameters, null_dataset=[True, Fals
             else:
                 combined_state_dict[key] = state_dicts[0][key]
         
+        # Reshape state dict values to match the joint model's (non-batched) shapes
+        target_state_dict = combined_model.state_dict()
+        for key in list(combined_state_dict.keys()):
+            if key in target_state_dict:
+                target_shape = target_state_dict[key].shape
+                if combined_state_dict[key].shape != target_shape:
+                    combined_state_dict[key] = combined_state_dict[key].reshape(target_shape)
+
         # Load dict for joint model
         combined_model.load_state_dict(combined_state_dict, strict=False)
         
