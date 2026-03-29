@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import torch
 import gpytorch
-import pandas as pd
 from copy import deepcopy
 
 
@@ -12,7 +11,26 @@ from utils import update_checklist, is_notebook
 
 
 def predict_and_evaluate_batched(result_dict, parameters, null_dataset=[True, False]):
+    """
+    Generate posterior predictions for all full and joint GP models.
 
+    Evaluates each model on a dense grid between min and max temperature,
+    extracting posterior means, confidence intervals, likelihood prediction
+    intervals, and covariance matrices. Also extracts the original training
+    data to combine fitted and measured values into a single result DataFrame.
+
+    Args:
+        result_dict: Output from define_joint_model_batched containing trained
+            full models, joint models, and metadata.
+        parameters: Full parameter dictionary (uses n_predictions, result_dir,
+            perturbation, dtype).
+        null_dataset: Whether this is the null pipeline (affects checklist display).
+
+    Returns:
+        prediction_result_dict: Extended copy of result_dict with gp_result_df
+            (predictions + measured data), gp_full_covariance, and
+            gp_joint_covariance dictionaries.
+    """
     # Update the checklist
     if is_notebook():
         if null_dataset == False:
@@ -108,7 +126,7 @@ def predict_and_evaluate_batched(result_dict, parameters, null_dataset=[True, Fa
                 condition = meta['condition']
                 
                 # Extract this task's predictions
-                if model.num_tasks > 1:
+                if model.num_tasks >= 1:
                     # Batched model
                     task_mean = f_pred.mean[task_idx].cpu()
                     task_conf_lower = f_pred.confidence_region()[0][task_idx].cpu()
@@ -190,8 +208,12 @@ def predict_and_evaluate_batched(result_dict, parameters, null_dataset=[True, Fa
     predictions_joint_conflik_upper = []
     covariance_matrices_joint = {}
 
+    # Get joint model protein order (matches joint_model.models ordering)
+    joint_proteins = result_dict['joint_mll_values']['protein'].values
+    n_joint = len(joint_proteins)
+
     for i, (combined_model, combined_likelihood) in enumerate(zip(joint_model.models, joint_likelihood.likelihoods)):
-        protein = proteins2test[i]
+        protein = joint_proteins[i]
         condition = 'joint'
         
         # Set submodel into eval mode
@@ -217,12 +239,12 @@ def predict_and_evaluate_batched(result_dict, parameters, null_dataset=[True, Fa
             key = f"{protein}_{condition}"
             covariance_matrices_joint[key] = covariance_matrix
 
-    # Dataframe with fits for joint model 
+    # Dataframe with fits for joint model
     result_joint_df = pd.DataFrame({
-        'uniqueID': np.repeat(proteins2test, len(test_x)),
-        'condition': np.tile(np.repeat('joint', len(test_x)), n_prot),
-        'type': np.tile(np.repeat('fitted', len(test_x)), n_prot),
-        'x': np.tile(test_x.cpu().numpy(), n_prot),
+        'uniqueID': np.repeat(joint_proteins, len(test_x)),
+        'condition': np.tile(np.repeat('joint', len(test_x)), n_joint),
+        'type': np.tile(np.repeat('fitted', len(test_x)), n_joint),
+        'x': np.tile(test_x.cpu().numpy(), n_joint),
         'y': np.array(predictions_joint_mean).flatten(),
         'conf_lower': np.array(predictions_joint_conf_lower).flatten(),
         'conf_upper': np.array(predictions_joint_conf_upper).flatten(),
@@ -257,7 +279,7 @@ def predict_and_evaluate_batched(result_dict, parameters, null_dataset=[True, Fa
             protein = meta['protein']
             condition = meta['condition']
             
-            if model.num_tasks > 1:
+            if model.num_tasks >= 1:
                 # Batched model - extract this task's targets
                 y_values = train_y[task_idx].numpy()
             else:
